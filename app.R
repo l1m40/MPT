@@ -16,7 +16,7 @@ suppressMessages(library(ROI.plugin.quadprog))
 suppressMessages(library(ROI.plugin.glpk))
 library(tseries)
 library(corrplot)
-
+library(reshape2)
 
 
 
@@ -176,31 +176,6 @@ assign("PMPT_returns",NULL,envir=.GlobalEnv)
 #   simple_message(paste(nrow(returns),"dates since",min(index(returns))))
 #   return(returns)
 # }
-# MPT_validate_returns_plot <- function(returns){
-#   if(is.null(returns))                          { return(plot_title("Cannot plot correlations\nasset returns NULL",fill="white"))
-#   } else if(ncol(returns)>30 | nrow(returns)<60){ return(plot_title(paste("Cannot plot correlations","\nncol =",ncol(returns),"\nnrow =",nrow(returns)),fill="white"))
-#   } else { return(NULL) }
-# }
-# MPT_create_portfolio <- function(assets_input,constrains_input,objectives_input,box_min=0,box_max=1){
-#   simple_message("Create portfolio object")
-#   portf_test <- portfolio.spec(assets=assets_input)
-#   simple_message(constrains_input)
-#   if(!is.na(match("full_investment",constrains_input)))
-#     portf_test <- add.constraint(portfolio=portf_test, type="full_investment") # Add full investment constraint to the portfolio object
-#   if(!is.na(match("long_only",constrains_input)))
-#     # portf_test <- add.constraint(portfolio=portf_test,type="box",min=0,max=1)  # Long-Only Constraint (no short selling)
-#     portf_test <- add.constraint(portfolio=portf_test,type="long_only")  # Long-Only Constraint (no short selling)
-#   if(!is.na(match("box",constrains_input)))
-#     portf_test <- add.constraint(portfolio=portf_test,type="box",min=as.double(box_min),max=as.double(box_max)) # Box Constrained Weights
-#   simple_message(objectives_input)
-#   if(!is.na(match("risk",objectives_input)))
-#     portf_test <- add.objective(portfolio=portf_test,type="risk",name="var") # Add objective to minimize variance: var StdDev produce similar results
-#   if(!is.na(match("ETL",objectives_input)))
-#     portf_test <- add.objective(portfolio=portf_test,type="risk",name="ETL",arguments=list(p=0.95))  # 95% confidence level (Minimize Expected Tail Loss)
-#   if(!is.na(match("return",objectives_input)))
-#     portf_test <- add.objective(portfolio=portf_test,type="return",name="mean") # Add objective to maximize return
-#   return(portf_test)
-# }
 MPT_asset_price_action <- function(asset_input){
   df <- extract_data %>% filter(asset==asset_input) %>% mutate(varln=log(price/lag(price))) %>% select(date,varln)
   if(nrow(df)==0){
@@ -229,6 +204,31 @@ MPT_asset_returns <- function(asset_list=c("PETR4","VALE3","ITUB4","ELET3")){
   simple_message(paste("Funds = ",paste(colnames(df),collapse=" : ")))
   
   return(df)
+}
+MPT_validate_returns_plot <- function(returns){
+  if(is.null(returns))                          { return(plot_title("Cannot plot \nasset returns NULL",fill="white"))
+  } else if(ncol(returns)>30 | nrow(returns)<60){ return(plot_title(paste("Cannot plot ","\nncol =",ncol(returns),"\nnrow =",nrow(returns)),fill="white"))
+  } else { return(NULL) }
+}
+MPT_create_portfolio <- function(assets_input,constrains_input,objectives_input,box_min=0,box_max=1){
+  simple_message("Create portfolio object")
+  portf_test <- portfolio.spec(assets=assets_input)
+  simple_message(constrains_input)
+  if(!is.na(match("full_investment",constrains_input)))
+    portf_test <- add.constraint(portfolio=portf_test, type="full_investment") # Add full investment constraint to the portfolio object
+  if(!is.na(match("long_only",constrains_input)))
+    # portf_test <- add.constraint(portfolio=portf_test,type="box",min=0,max=1)  # Long-Only Constraint (no short selling)
+    portf_test <- add.constraint(portfolio=portf_test,type="long_only")  # Long-Only Constraint (no short selling)
+  if(!is.na(match("box",constrains_input)))
+    portf_test <- add.constraint(portfolio=portf_test,type="box",min=as.double(box_min),max=as.double(box_max)) # Box Constrained Weights
+  simple_message(objectives_input)
+  if(!is.na(match("risk",objectives_input)))
+    portf_test <- add.objective(portfolio=portf_test,type="risk",name="var") # Add objective to minimize variance: var StdDev produce similar results
+  if(!is.na(match("ETL",objectives_input)))
+    portf_test <- add.objective(portfolio=portf_test,type="risk",name="ETL",arguments=list(p=0.95))  # 95% confidence level (Minimize Expected Tail Loss)
+  if(!is.na(match("return",objectives_input)))
+    portf_test <- add.objective(portfolio=portf_test,type="return",name="mean") # Add objective to maximize return
+  return(portf_test)
 }
 MPT_portfolio_spec_MVO <- function(funds,box=NULL){
   portf <- portfolio.spec(assets=funds)
@@ -485,6 +485,7 @@ ui <- dashboardPage(
     menuItem(" Hierarchical Risk Parity"            ,tabName="hrp"           ,icon=icon("education",lib="glyphicon")),
     menuItem(" Post-Modern Portfolio Theory"        ,tabName="pmpt"          ,icon=icon("education",lib="glyphicon")),
     menuItem(" Black-Litterman model"               ,tabName="blm"           ,icon=icon("education",lib="glyphicon")),
+    menuItem(" Fama–French three-factor model"      ,tabName="fama"          ,icon=icon("education",lib="glyphicon")),
     menuItem("About me"           ,tabName="about_me"      ,icon=NULL)
     # menuItem("  Backtest Analysis",tabName="backtest",icon=suppressMessages(icon("chart-simple",lib="font-awesome"))),
     # menuItem("  Data Mining",tabName="backtest_conditions",icon=suppressMessages(icon("chart-simple",lib="font-awesome"))),
@@ -497,6 +498,7 @@ ui <- dashboardPage(
     tabItem("hrp"           ,uiOutput("UI_hrp_study")),
     tabItem("pmpt"          ,uiOutput("UI_pmpt_study")),
     tabItem("blm"           ,uiOutput("UI_blm_study")),
+    tabItem("fama"          ,uiOutput("UI_fama_study")),
     tabItem("about_me"      ,uiOutput("xxxUI_about_me"))
   ))
 )
@@ -505,6 +507,46 @@ ui <- dashboardPage(
 # Server ###################################################
 simple_message("Loading server")
 server <- function(input, output, session) {
+  
+  
+  
+  
+  
+  # Fama-French Study ##############################################
+  output$UI_fama_study <- renderUI({
+    fluidRow(
+      fluidRow(
+        column(1,div()),
+        column(10,
+               h2("Fama–French three-factor model"),
+               p(""),br(),
+               p(""),p(style="text-align: right; font-size: 10px;","source: https://"),br(),
+               br()
+        ),
+        column(1,div())
+      ),
+      
+      fluidRow(
+        column(1,div()),
+        column(10,fluidRow(uiOutput("UI_fama_study_inputs_panel"))),
+        column(1,div())
+      ),
+      fluidRow(
+        column(1,div()),
+        column(10,fluidRow(uiOutput("UI_fama_study_graphs"),br(),uiOutput("UI_fama_study_graphs_compare"))),
+        column(1,div())
+      ),
+      h2("...")
+    )
+  })
+  
+  
+  
+  
+  
+  
+  
+  
   
   
   
@@ -640,53 +682,68 @@ server <- function(input, output, session) {
     assign("PMPT_rebal",bt_test,envir=.GlobalEnv)
     assign("PMPT_returns",returns,envir=.GlobalEnv)
     funds <- colnames(PMPT_returns)
-    output$UI_pmpt_study_plot_portfolio <- renderText({ funds })
+    output$UI_pmpt_study_plot_portfolio1 <- renderText({ funds })
     # hrpWts <- HRP_portfolio_rebal(returns)$hrpWts
     
     output$UI_pmpt_study_graphs <- renderUI({
       fluidRow(
-        fluidRow(column(4,h2("Rebalancing")),column(8,textOutput("UI_pmpt_study_plot_portfolio"))),
+        fluidRow(column(4,h2("Rebalancing")),column(8,textOutput("UI_pmpt_study_plot_portfolio1"))),
         br(),plotOutput("UI_pmpt_study_plot_rebalancing",height="700px"),
         br(),actionButton("UI_pmpt_study_compare","Compare with other methods"),br(),
-        br(),plotOutput("UI_pmpt_study_graphs_compare_weights",height="700px"),
-        br(),plotOutput("UI_pmpt_study_graphs_compare_curve",height="700px"),
+        br(),uiOutput("UI_pmpt_study_graphs_compare"),
         br()) 
     })
     output$UI_pmpt_study_plot_rebalancing <- renderPlot({
       returns_plot <- returns[index(returns)>input$UI_pmpt_study_rebalancing_start_date]
       MPT_portfolio_performance_plot(returns_plot,PMPT_rebal,plot_each_asset_returns=length(funds)<20)
     })
+    
     output$UI_pmpt_study_graphs_compare_weights <- NULL
     output$UI_pmpt_study_graphs_compare_curve <- NULL
+    output$UI_pmpt_study_graphs_compare <- renderUI({ div() })
   })
   
   observeEvent(input$UI_pmpt_study_compare,{
     simple_message(paste("Compare PMPT with other optimization methods",input$UI_pmpt_study_portfolio))
     funds <- colnames(PMPT_returns)
+    output$UI_pmpt_study_plot_portfolio2 <- renderText({ funds })
+    
+    # showModal(modalDialog("Running rebalancing with other optimization methods...",footer=NULL))
     hrpWts <- HRP_portfolio_rebal(PMPT_returns)$hrpWts
+    
+    output$UI_pmpt_study_graphs_compare <- renderUI({
+      fluidRow(
+        plotOutput("UI_pmpt_study_graphs_compare_weights",height="700px"),br(),br(),
+        fluidRow(column(4,h4("Compare optimization methods")),column(8,textOutput("UI_pmpt_study_plot_portfolio2"))),
+        plotOutput("UI_pmpt_study_graphs_compare_curve",height="700px"),br())
+    })
     output$UI_pmpt_study_graphs_compare_weights <- renderPlot({
       returns_plot <- PMPT_returns[index(PMPT_returns)>input$UI_pmpt_study_rebalancing_start_date]
       grid.arrange(
         MPT_portfolio_performance_plot(returns_plot,weights=hrpWts[,!names(hrpWts) %in% c("cash")],graph_text="HRP optimization"),
         MPT_portfolio_performance_plot(returns_plot,PMPT_rebal),
-        MPT_portfolio_performance_plot(returns_plot,optimize.portfolio.rebalancing(R=PMPT_returns,portfolio=MPT_portfolio_spec_MVO    (funds,c(0,.4)),optimize_method="ROI",rebalance_on="months",training_period=90)),
+        MPT_portfolio_performance_plot(returns_plot,optimize.portfolio.rebalancing(R=PMPT_returns,portfolio=MPT_portfolio_spec_MVO    (funds,c(0,.4)),optimize_method="ROI",rebalance_on="quarters",training_period=90)),
         grid.draw(grid::rectGrob(gp = grid::gpar(fill = "white"))),heights=c(1,1,1,0))
     })
     output$UI_pmpt_study_graphs_compare_curve <- renderPlot({
       returns_plot <- PMPT_returns[index(PMPT_returns)>input$UI_pmpt_study_rebalancing_start_date]
+      equalWts <- hrpWts[,!names(hrpWts) %in% c("cash")]
+      equalWts[] <- 1/length(funds)
       compare <- cbind(
+        Return.portfolio(R=returns_plot,weights=equalWts),
         Return.portfolio(R=returns_plot,weights=hrpWts[,!names(hrpWts) %in% c("cash")]),
         Return.portfolio(R=returns_plot,weights=extractWeights(PMPT_rebal)),
-        Return.portfolio(R=returns_plot,weights=extractWeights(optimize.portfolio.rebalancing(R=PMPT_returns,MPT_portfolio_spec_MVO    (funds,c(0,.4)),optimize_method="ROI",rebalance_on="months",training_period=90))))
-      colnames(compare) <- c("Hierarchical.Risk.Parity","Post.MPT","MVO..MPT")
+        Return.portfolio(R=returns_plot,weights=extractWeights(optimize.portfolio.rebalancing(R=PMPT_returns,MPT_portfolio_spec_MVO    (funds,c(0,.4)),optimize_method="ROI",rebalance_on="quarters",training_period=90))))
+      colnames(compare) <- c("Equal","Hierarchical.Risk.Parity","Post.MPT","MVO..MPT")
       compare <- na.omit(compare)
-      scale_color_opt_methods <- scale_color_manual(values=c("Hierarchical.Risk.Parity"="black","Post.MPT"="dodgerblue","MVO..MPT"="slategray4"))
+      scale_color_opt_methods <- scale_color_manual(values=c("Hierarchical.Risk.Parity"="black","Post.MPT"="palegreen3","MVO..MPT"="aquamarine4","Equal"="gray89"))
       grid.arrange(
         chart.CumReturns(compare,plot.engine = "ggplot2")+theme_excel_new()+scale_color_opt_methods+labs(color="opt.methods",title="Cumulative Return")+theme(legend.position="top",legend.text = element_text()),
         chart.Drawdown  (compare,plot.engine = "ggplot2")+theme_excel_new()+scale_color_opt_methods+labs(color="opt.methods",title="Drawdown"         )+theme(legend.position="none",axis.text.x=element_blank()),
         heights=c(3,1)
       )
     })
+    # removeModal()
   })
   
   
@@ -883,6 +940,7 @@ server <- function(input, output, session) {
   })
   assets_top_17 <- c("ITUB4","VALE3","BBDC4","ABEV3","PETR4","B3SA3","BBAS3","BRFS3","UGPA3","COGN3","LREN3","VIVT3","CCRO3","BBSE3","RADL3")
   assets_top_25 <- c("PETR4","VALE3","ITUB4","WEGE3","ABEV3")
+  assets_hi_lo  <- c("PETR4","VALE3","ITUB4","WEGE3","ABEV3","AZUL4","MGLU3","ASAI3","CSAN3","USIM5")
   assets_oil    <- c("PETR4","CSAN3","PRIO3","BRAV3","VBBR3","UGPA3","RAIZ4","SMTO3")
   assets_iron   <- c("VALE3","GGBR4","CSNA3","CMIN3","USIM5")
   assets_banks  <- c("ITUB4","BBDC4","BBAS3","SANB11","INBR32","ROXO34")
@@ -895,6 +953,7 @@ server <- function(input, output, session) {
       tabPanel("Stocks",fluidRow(p(style="text-align: center;",
         actionButton("UI_mpt_study_select_top_17",paste0("Top Marketcap 2017\n" ,"")),br(),
         actionButton("UI_mpt_study_select_top_25",paste0("Top Marketcap 2025 "  ,paste(assets_top_25,collapse=":"))),br(),
+        actionButton("UI_mpt_study_select_hi_lo" ,paste0("Leaders and Laggards" ,"")),br(),
       ))),
       tabPanel("Sectors",fluidRow(p(style="text-align: center;",
         actionButton("UI_mpt_study_select_oil"   ,paste0("Oil "                 ,paste(assets_oil   ,collapse=":"))),br(),
@@ -911,6 +970,7 @@ server <- function(input, output, session) {
       br())})
   observeEvent(input$UI_mpt_study_select_top_17, { updateSelectInput(session,"UI_mpt_study_assets_input",selected=assets_top_17) })
   observeEvent(input$UI_mpt_study_select_top_25, { updateSelectInput(session,"UI_mpt_study_assets_input",selected=assets_top_25) })
+  observeEvent(input$UI_mpt_study_select_hi_lo , { updateSelectInput(session,"UI_mpt_study_assets_input",selected=assets_hi_lo ) })
   observeEvent(input$UI_mpt_study_select_oil   , { updateSelectInput(session,"UI_mpt_study_assets_input",selected=assets_oil   ) })
   observeEvent(input$UI_mpt_study_select_iron  , { updateSelectInput(session,"UI_mpt_study_assets_input",selected=assets_iron  ) })
   observeEvent(input$UI_mpt_study_select_banks , { updateSelectInput(session,"UI_mpt_study_assets_input",selected=assets_banks ) })
@@ -921,35 +981,59 @@ server <- function(input, output, session) {
   output$UI_mpt_study_inputs_panel <- renderUI({ fluidRow(
       selectInput("UI_mpt_study_assets_input","Choose the assets, inputs parameters and then your visualization",unique(extract_data$asset),c(""),multiple=T,width="100%"),
       fluidRow(
-        column(6,checkboxGroupInput("UI_mpt_study_constrains","Constrains:",selected=c("full_investment"),
+        column(6,checkboxGroupInput("UI_mpt_study_constrains","Constrains:",selected=c("full_investment","long_only"),
                                     choiceNames=list("Full Investment","Long Only","Box Constrained Weights"),
                                     choiceValues=list("full_investment","long_only","box")),fluidRow(column(6,textInput("UI_mpt_study_constrains_box_min","min",value=0)),column(6,textInput("UI_mpt_study_constrains_box_max","max",value=0.4)))),
-        column(6,checkboxGroupInput("UI_mpt_study_objectives","Objectives:",selected=c("risk"),
+        column(6,checkboxGroupInput("UI_mpt_study_objectives","Objectives:",selected=c("risk","return"),
                                     choiceNames=list("Minimize Variance","Maximize Return","Minimize Expected Tail Loss (ETL) aka Conditional Value-at-Risk (CVaR) (this can take time with a long window)"),
                                     choiceValues=list("risk","return","ETL")))),
       fluidRow(
         column(7,
+               actionButton("UI_mpt_study_covariance"    ,"Covariance"),
                actionButton("UI_mpt_study_correlations"  ,"Correlation"),
                actionButton("UI_mpt_study_run"           ,"Run Optimization"),
                actionButton("UI_mpt_study_rebalancing"   ,"Rebalancing")),
         column(2,textInput("UI_mpt_study_rebalancing_training_period",NULL,value=90,width="60px")),
         column(3,dateInput("UI_mpt_study_rebalancing_start_date"     ,NULL,value="2023-01-01",width="90px"))),
       br())})
+  # MPT Study Covariance ###################################
+  observeEvent(input$UI_mpt_study_covariance,{
+    returns <- MPT_asset_returns(input$UI_mpt_study_assets_input)
+    output$UI_mpt_study_plot_covariance <- renderPlot({
+      returns_validate <- MPT_validate_returns_plot(returns)
+      if(!is.null(returns_validate)) { plot(returns_validate)
+      } else { 
+        cov_matrix <- cov(returns)
+        cov_melted <- melt(cov_matrix)
+        grid.arrange(
+          cov_melted %>% ggplot()+geom_boxplot(aes(value),outlier.size=.5)+labs(title="Covariance values distribution",x="")+theme_minimal()+theme(axis.text.y=element_blank()),
+          cov_melted %>% ggplot(aes(x=Var1,y=Var2,fill=value))+geom_tile()+
+            scale_fill_gradient2(low="blue",high="red",mid="white",midpoint=mean(cov_melted$value))+
+            theme_minimal()+theme(axis.text.x=element_text(angle=90))+
+            labs(title = "Covariance matrix heatmap", x = "", y = ""),
+          heights=c(1,3)
+        )
+      }
+    })
+    output$UI_mpt_study_graphs <- renderUI({ fluidRow(h2("Matrix of covariances"),plotOutput("UI_mpt_study_plot_covariance",height="500px"),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br()) })
+  })
   # MPT Study Correlations #################################
   observeEvent(input$UI_mpt_study_correlations,{
-    returns <- MPT_prepare_returns(input$UI_mpt_study_assets_input)
-    output$UI_mpt_study_correlation <- renderPlot({
+    # returns <- MPT_prepare_returns(input$UI_mpt_study_assets_input)
+    returns <- MPT_asset_returns(input$UI_mpt_study_assets_input)
+    output$UI_mpt_study_plot_correlations <- renderPlot({
       returns_validate <- MPT_validate_returns_plot(returns)
       # if(is.null(returns))                          { plot_title("Cannot plot correlations\nasset returns NULL",fill="white")
       # } else if(ncol(returns)>20 | nrow(returns)<60){ plot_title(paste("Cannot plot correlations","\nncol =",ncol(returns),"\nnrow =",nrow(returns)),fill="white")
       if(!is.null(returns_validate)) { plot(returns_validate)
       } else { corrplot(round(cor(returns),2),method="color",addCoef.col="navy",order="AOE",number.cex=0.975) }
     })
-    output$UI_mpt_study_graphs <- renderUI({ fluidRow(h2("Correlation"),plotOutput("UI_mpt_study_correlation"),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br()) })
+    output$UI_mpt_study_graphs <- renderUI({ fluidRow(h2("Correlation"),plotOutput("UI_mpt_study_plot_correlations",height="500px"),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br(),br()) })
   })
   # MPT Study Optimization #################################
   observeEvent(input$UI_mpt_study_run,{
-    returns <- MPT_prepare_returns(input$UI_mpt_study_assets_input)
+    # returns <- MPT_prepare_returns(input$UI_mpt_study_assets_input)
+    returns <- MPT_asset_returns(input$UI_mpt_study_assets_input)
     output$UI_mpt_study_plot_optimize <- renderPlot({
       returns_validate <- MPT_validate_returns_plot(returns)
       # if(is.null(returns))                          { plot_title("Cannot plot correlations\nasset returns NULL",fill="white")
@@ -969,7 +1053,8 @@ server <- function(input, output, session) {
   observeEvent(input$UI_mpt_study_rebalancing,{
     # showModal(modalDialog("Running rebalancing training...",footer=NULL))
     # returns <- MPT_prepare_returns(c("XINA11","GOLD11","IVVB11","HASH11"))
-    returns <- MPT_prepare_returns(input$UI_mpt_study_assets_input)
+    # returns <- MPT_prepare_returns(input$UI_mpt_study_assets_input)
+    returns <- MPT_asset_returns(input$UI_mpt_study_assets_input)
     dates_count <- nrow(returns[as.Date(index(returns)) > as.Date(input$UI_mpt_study_rebalancing_start_date), ])
     # returns %>% tail(dates_count+as.integer(90)) %>% head(10)
     study_rebalancing_training_period <- as.integer(input$UI_mpt_study_rebalancing_training_period)
@@ -996,6 +1081,8 @@ server <- function(input, output, session) {
         # bt_test <- optimize.portfolio.rebalancing(R=returns,portfolio=portf_test,optimize_method="ROI",rebalance_on="quarters",training_period=90)
         bt_test <- optimize.portfolio.rebalancing(R=returns,portfolio=portf_test,optimize_method="ROI",rebalance_on="quarters",training_period=study_rebalancing_training_period)
         print(bt_test)
+        output$UI_mpt_study_plot_weights_status <- renderPrint({ bt_test$elapsed_time })
+        output$UI_mpt_study_plot_weights_summary <- renderPrint({ summary(bt_test) })
         simple_message("Calculating weighted returns")
         bt_test.r <- Return.portfolio(R=returns,weights=extractWeights(bt_test))
         colnames(bt_test.r) <- "optimize"
@@ -1056,7 +1143,7 @@ server <- function(input, output, session) {
       }
     })
     output$UI_mpt_study_graphs <- renderUI({ fluidRow(fluidRow(column(6,h2("Rebalancing backtest")),column(6,textOutput("UI_mpt_study_plot_weights_portfolio"))),
-                                                      plotOutput("UI_mpt_study_plot_weights",height="600px")) })
+                                                      plotOutput("UI_mpt_study_plot_weights",height="600px"),br(),verbatimTextOutput("UI_mpt_study_plot_weights_status"),verbatimTextOutput("UI_mpt_study_plot_weights_summary")) })
     # removeModal()
   })
   
@@ -1085,6 +1172,8 @@ server <- function(input, output, session) {
                p(style="text-align: right; font-size: 10px;","source: www.investopedia.com"),
                p("Using the CAPM to build a portfolio is supposed to help an investor manage their risk. If an investor were able to use the CAPM to perfectly optimize a portfolio’s return relative to risk, it would exist on a curve called the efficient frontier, as shown in the following graph."),
                img(style="display: block; margin-left: auto; margin-right: auto; height: 350px",src="https://www.investopedia.com/thmb/Yer-5_eZyP12ofB-XKLSgZ8ODvE=/750x0/filters:no_upscale():max_bytes(150000):strip_icc()/CapitalAssetPricingModelCAPM1_2-e6be6eb7968d4719872fe0bcdc9b8685.png"),
+               br(),br(),br(),
+               img(style="display: block; margin-left: auto; margin-right: auto; height: 250px",src="efficient_frontier_and_correlation.png"),
                br(),br(),br()),
         column(1,div())
       ),
