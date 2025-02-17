@@ -201,7 +201,7 @@ MPT_asset_returns <- function(asset_list=c("PETR4","VALE3","ITUB4","ELET3")){
   
   print(head(df, 10))
   
-  simple_message(paste("Funds = ",paste(colnames(df),collapse=" : ")))
+  simple_message(paste("Assets = ",paste(colnames(df),collapse=" : ")))
   
   return(df)
 }
